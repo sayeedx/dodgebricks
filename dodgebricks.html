@@ -333,7 +333,12 @@
                 }
 
                 const brickColor = `hsl(${Math.random() * 360}, 70%, 50%)`;
-                const currentBrickSpeed = settings.brickSpeed + Math.floor(score / 100) * 0.5;
+                let currentBrickSpeed = settings.brickSpeed + Math.floor(score / 100) * 0.5;
+
+                // Double vertical brick speed after score 600
+                if (score >= 600) {
+                    currentBrickSpeed = settings.brickSpeed * 2 + Math.floor(score / 100) * 0.5;
+                }
 
                 for (let i = 0; i < totalBricksInRow; i++) {
                     if (!gaps.includes(i)) {
@@ -353,6 +358,10 @@
                 let brickSpeed = 3;
                 if (score >= 250) {
                     brickSpeed = 6; // Double the speed
+                }
+                // Double red box speed again after score 400
+                if (score >= 400) {
+                    brickSpeed = 12; // Double the speed again
                 }
                 
                 const startX = Math.random() < 0.5 ? -brickWidth : canvas.width;
@@ -392,7 +401,12 @@
 
                 // Spawn new brick rows based on a counter
                 rowSpawnCounter++;
-                const currentSpawnRate = Math.max(settings.rowSpawnRate - Math.floor(score / 50) * 5, 60);
+                let currentSpawnRate = Math.max(settings.rowSpawnRate - Math.floor(score / 50) * 5, 60);
+                
+                // Make vertical brick rows spawn at an even rate after score 600
+                if (score >= 600) {
+                    currentSpawnRate = 120; // Fixed, faster rate
+                }
 
                 if (rowSpawnCounter >= currentSpawnRate) {
                     if (verticalRowCount < 3) { // Changed to spawn after 3 vertical rows
