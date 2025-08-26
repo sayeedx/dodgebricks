@@ -1,395 +1,819 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Dodge the Bricks</title>
+  <title>Dodge the Bricks — Multi-Mode</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      background-color: #f0f0f0;
-      display: flex; justify-content: center; align-items: center;
-      height: 100vh; margin: 0; overflow: hidden;
-    }
-    #game-container {
-      width: 100%; height: 100%; max-width: 800px; max-height: 600px;
-      position: relative; background-color: #fff; border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden;
-    }
-    canvas { display: block; }
-    #start-screen, #game-over-screen {
-      position: absolute; inset: 0;
-      display: flex; flex-direction: column; justify-content: center; align-items: center;
-      background: rgba(0,0,0,0.8); color: #fff; z-index: 100; text-align: center;
-    }
-    #game-over-screen { display: none; }
-    #start-button, #restart-button {
-      padding: 1rem 2rem; font-size: 1.25rem; font-weight: 700;
-      border: 0; border-radius: 8px; cursor: pointer; transition: .2s;
-      box-shadow: 0 4px 6px rgba(0,0,0,.1);
-    }
-    #start-button { background: #3b82f6; }
-    #start-button:hover { background: #2563eb; transform: translateY(-2px); }
-    #restart-button { background: #22c55e; }
-    #restart-button:hover { background: #16a34a; transform: translateY(-2px); }
+    :root { --overlay: rgba(0,0,0,.8); }
+    body { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#f3f4f6; height:100vh; display:grid; place-items:center; margin:0; }
+    #game { position:relative; width:100%; height:100%; max-width: 900px; max-height: 650px; background:#fff; border-radius:16px; overflow:hidden; box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+    canvas { display:block; width:100%; height:100%; background:#fff; }
+    /* Overlays */
+    .overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:var(--overlay); color:#fff; z-index:10; }
+    .overlay.show { display:flex; }
+    .panel { width:min(92%,720px); background:#0b1020; border:1px solid rgba(255,255,255,.1); border-radius:16px; padding:24px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    .btn { padding:.75rem 1.25rem; font-weight:700; border-radius:.75rem; border:0; cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.15); transition: transform .1s ease, opacity .15s ease; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+    .btn-primary { background:#3b82f6; color:#fff; }
+    .btn-primary:hover { background:#2563eb; }
+    .btn-ghost { background:transparent; border:1px solid rgba(255,255,255,.2); color:#fff; }
+    .btn-danger { background:#ef4444; color:#fff; }
+    .btn-green { background:#22c55e; color:#0b1020; }
+    .btn-purple { background:#8b5cf6; color:#fff; }
+    .row { display:flex; flex-wrap:wrap; gap:12px; }
+    .chip { padding:.5rem .75rem; border-radius:.75rem; background:#111827; border:1px solid rgba(255,255,255,.15); cursor:pointer; }
+    .chip.selected { background:#6d28d9; }
+    .kbd { padding:.25rem .5rem; border:1px solid #e5e7eb; border-bottom-width:3px; border-radius:.5rem; background:#fff; color:#111827; font-weight:700; }
+    /* Top-right in-game menu button */
+    #ingameMenuBtn { position:absolute; right:10px; top:10px; z-index:5; display:none; }
+    /* Game over panel tweak */
+    .table { width:100%; border-collapse: collapse; margin-top:10px; }
+    .table th, .table td { border-bottom:1px solid rgba(255,255,255,.1); padding:8px 10px; text-align:left; }
   </style>
 </head>
 <body>
-  <div id="game-container" class="rounded-xl shadow-lg">
-    <div id="start-screen">
-      <h1 class="text-4xl md:text-5xl font-extrabold mb-4">Dodge the Bricks</h1>
-      <p class="text-xl mb-8">Space = Jump • ←/→ = Move • ↓ = Crouch</p>
-      <button id="start-button">Start Game</button>
+  <div id="game">
+    <canvas id="canvas"></canvas>
+
+    <!-- In-game Menu button -->
+    <button id="ingameMenuBtn" class="btn btn-ghost">Menu</button>
+
+    <!-- Start Menu -->
+    <div id="menu" class="overlay show">
+      <div class="panel">
+        <h1 class="text-3xl md:text-4xl font-extrabold mb-3">Dodge the Bricks</h1>
+        <p class="opacity-80 mb-4">Select a mode, check the instructions, then press Start.</p>
+
+        <h2 class="text-xl font-bold mb-2">Mode</h2>
+        <div class="row mb-4" id="modeChips">
+          <button class="chip" data-mode="solo">Solo</button>
+          <button class="chip" data-mode="coop">Co-op</button>
+          <button class="chip" data-mode="multi">Multiplayer (2P)</button>
+          <button class="chip" data-mode="triple">Triple Player (3P)</button>
+        </div>
+
+        <div class="row mb-6">
+          <button id="instructionsBtn" class="btn btn-ghost">Instructions</button>
+          <button id="startBtn" class="btn btn-primary" disabled>Start</button>
+        </div>
+
+        <div class="text-sm opacity-80 leading-relaxed">
+          <p><strong>Notes:</strong></p>
+          <ul class="list-disc ml-6">
+            <li><em>Co-op</em>: falling-brick <strong>immunity</strong> for the non-triggering player.</li>
+            <li><em>Multiplayer/Triple</em>: <strong>no immunity</strong>, elimination, last player standing wins.</li>
+          </ul>
+        </div>
+      </div>
     </div>
 
-    <div id="game-over-screen">
-      <h2 class="text-4xl md:text-5xl font-extrabold mb-4">Game Over!</h2>
-      <p class="text-xl mb-2">Your Score:</p>
-      <p id="final-score" class="text-5xl md:text-6xl font-extrabold text-blue-400 mb-8">0</p>
-      <button id="restart-button">Restart</button>
+    <!-- Instructions -->
+    <div id="instructions" class="overlay">
+      <div class="panel">
+        <h2 class="text-2xl font-bold mb-3">Instructions</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          <div class="p-3 rounded-xl bg-indigo-900/40 border border-white/10">
+            <h3 class="font-bold mb-2">Player 1</h3>
+            <div class="space-x-2">
+              <span class="kbd">W</span><span class="opacity-70">jump</span>
+            </div>
+            <div class="space-x-2">
+              <span class="kbd">S</span><span class="opacity-70">duck</span>
+            </div>
+            <div class="space-x-2">
+              <span class="kbd">A</span><span class="opacity-70">left</span>
+              <span class="kbd">D</span><span class="opacity-70">right</span>
+            </div>
+          </div>
+          <div class="p-3 rounded-xl bg-indigo-900/40 border border-white/10">
+            <h3 class="font-bold mb-2">Player 2</h3>
+            <div class="space-x-2">
+              <span class="kbd">↑</span><span class="opacity-70">jump</span>
+            </div>
+            <div class="space-x-2">
+              <span class="kbd">↓</span><span class="opacity-70">duck</span>
+            </div>
+            <div class="space-x-2">
+              <span class="kbd">←</span><span class="opacity-70">left</span>
+              <span class="kbd">→</span><span class="opacity-70">right</span>
+            </div>
+          </div>
+          <div class="p-3 rounded-xl bg-indigo-900/40 border border-white/10">
+            <h3 class="font-bold mb-2">Player 3</h3>
+            <div class="space-x-2">
+              <span class="kbd">I</span><span class="opacity-70">jump</span>
+            </div>
+            <div class="space-x-2">
+              <span class="kbd">K</span><span class="opacity-70">duck</span>
+            </div>
+            <div class="space-x-2">
+              <span class="kbd">J</span><span class="opacity-70">left</span>
+              <span class="kbd">L</span><span class="opacity-70">right</span>
+            </div>
+          </div>
+        </div>
+        <p class="opacity-80 mb-4">
+          Bricks spawn above. When a brick’s Y reaches a player’s Y, that vertical brick <strong>drops fast</strong>.<br/>
+          Co-op: the non-triggering player is immune to that specific falling brick while it falls. Competitive modes: no immunity.
+        </p>
+        <button id="backFromInstructions" class="btn btn-purple">Back</button>
+      </div>
     </div>
 
-    <canvas id="gameCanvas"></canvas>
+    <!-- Pause / Confirm Menu -->
+    <div id="pauseOverlay" class="overlay">
+      <div class="panel">
+        <h3 class="text-xl font-bold mb-2">Paused</h3>
+        <p class="opacity-80 mb-4">Are you sure you want to leave this game?</p>
+        <div class="row">
+          <button id="resumeBtn" class="btn btn-green">Resume</button>
+          <button id="restartBtn" class="btn btn-primary">Restart Game</button>
+          <button id="toMenuBtn" class="btn btn-danger">Main Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Over / Results -->
+    <div id="gameOver" class="overlay">
+      <div class="panel">
+        <h2 class="text-2xl font-bold mb-2">Results</h2>
+        <div id="resultsBlock" class="mb-4 text-white/90"></div>
+        <div class="row">
+          <button id="playAgainBtn" class="btn btn-primary">Play Again</button>
+          <button id="gameOverMenuBtn" class="btn btn-ghost">Main Menu</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
-  (function () {
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
+  (() => {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
 
-    const startScreen = document.getElementById("start-screen");
-    const startButton = document.getElementById("start-button");
-    const gameOverScreen = document.getElementById("game-over-screen");
-    const finalScoreElement = document.getElementById("final-score");
-    const restartButton = document.getElementById("restart-button");
+    // UI refs
+    const menu = document.getElementById('menu');
+    const modeChips = document.getElementById('modeChips');
+    const startBtn = document.getElementById('startBtn');
+    const instructionsBtn = document.getElementById('instructionsBtn');
+    const instructions = document.getElementById('instructions');
+    const backFromInstructions = document.getElementById('backFromInstructions');
+    const pauseOverlay = document.getElementById('pauseOverlay');
+    const ingameMenuBtn = document.getElementById('ingameMenuBtn');
+    const resumeBtn = document.getElementById('resumeBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const toMenuBtn = document.getElementById('toMenuBtn');
+    const gameOver = document.getElementById('gameOver');
+    const resultsBlock = document.getElementById('resultsBlock');
+    const playAgainBtn = document.getElementById('playAgainBtn');
+    const gameOverMenuBtn = document.getElementById('gameOverMenuBtn');
 
-    // --- Load sprite (57x76 per frame, 48 frames total; 4 rows x 12 cols) ---
+    // Sprites
     const erenSprite = new Image();
-    erenSprite.src = "eren.png";
+    erenSprite.src = 'eren.png';
 
-    let score = 0;
-    let player = null;
-    let bricks = [];
-    let isGameOver = false;
-    let animationFrameId;
-    let rowSpawnCounter = 0;
-    let verticalRowCount = 0;
+    const kimetsuSprite = new Image();
+    kimetsuSprite.src = 'kimetsu.png';
 
+
+    // State
     const settings = {
       playerSpeed: 8,
-      brickSpeed: 1.5,
       rowSpawnRate: 240,
+      brickSpeed: 1.6,
       baseBrickSize: 40,
       brickMargin: 25,
       jumpPower: 12,
-      gravity: 0.5
+      gravity: 0.5,
+      fastFallSpeed: 30
     };
 
-    let gameState = "start";
+    let gameState = 'menu'; // 'menu' | 'instructions' | 'playing' | 'paused' | 'gameover'
+    let mode = null; // 'solo' | 'coop' | 'multi' | 'triple'
 
-    // ---------------- Player using sprite ----------------
-    function Player(x, y) {
-      this.x = x;
-      this.y = y;
-      this.initialY = y;
+    // Game vars
+    let score = 0;
+    let players = [];          // array of Player
+    let bricks = [];           // array of Brick
+    let rowSpawnCounter = 0;
+    let verticalRowCount = 0;
+    let isOver = false;
+    let rafId = null;
+    let listenersAdded = false;
+    let lastTimestamp = 0;
 
-      // slightly bigger on screen (about 1.2x)
-      this.drawWidth = 68;   // display size (dest)
-      this.drawHeight = 91;
+    // Competitive stats
+    let deathOrder = []; // {id, time}
 
-      // sprite frame size (source)
-      this.frameWidth = 57;
-      this.frameHeight = 76;
+    function resize() {
+      const w = Math.min(900, document.getElementById('game').clientWidth);
+      const h = Math.min(650, document.getElementById('game').clientHeight);
+      canvas.width = w;
+      canvas.height = h;
+    }
+    resize();
+    window.addEventListener('resize', () => { if (gameState !== 'playing') resize(); });
 
-      // controls/state
-      this.isMovingLeft = false;
-      this.isMovingRight = false;
-      this.isCrouching = false;
-      this.facing = "right"; // start facing right
-      this.yVelocity = 0;
+    // Player
+    function Player(id, x, y, controls, sprite = erenSprite, frameW = 57, frameH = 76) {
+      this.id = id;
+      this.x = x; this.y = y; this.initialY = y;
+      this.sprite = sprite;
+      this.drawWidth = frameW * 1.2;  // scale factor
+      this.drawHeight = frameH * 1.2;
+      this.frameWidth = frameW;
+      this.frameHeight = frameH;
+      this.isLeft = false; this.isRight = false; this.isDown = false;
+      this.facing = 'right';
+      this.yv = 0;
+      this.col = 0; this.row = 0; this.timer = 0; this.step = 6;
+      this.alive = true;
+      this.controls = controls;
+      this.survivalTime = 0;
 
-      // animation
-      this.col = 0;    // frame index within row
-      this.row = 0;    // 0 idle, 1 crouch, 2 run, 3 jump
-      this.timer = 0;
-      this.step = 6;   // lower = faster animation
-      this.colsPerRow = 12;  // 48 frames / 4 rows
+      this.update = function(dt) {
+        if (!this.alive) return;
 
-      // frame caps per action (feel free to tweak)
-      this.maxCols = { idle: 12, crouch: 12, run: 12, jump: 12 };
+        if (this.isLeft)  this.x -= settings.playerSpeed;
+        if (this.isRight) this.x += settings.playerSpeed;
 
-      this.update = function () {
-        // movement
-        if (this.isMovingLeft)  this.x -= settings.playerSpeed;
-        if (this.isMovingRight) this.x += settings.playerSpeed;
+        this.y += this.yv;
+        this.yv += settings.gravity;
+        if (this.y >= this.initialY) { this.y = this.initialY; this.yv = 0; }
 
-        // physics (jump)
-        this.y += this.yVelocity;
-        this.yVelocity += settings.gravity;
-        if (this.y >= this.initialY) {
-          this.y = this.initialY;
-          this.yVelocity = 0;
-        }
-
-        // clamp to canvas
         if (this.x < 0) this.x = 0;
-        if (this.x + this.drawWidth > canvas.width) {
-          this.x = canvas.width - this.drawWidth;
-        }
+        if (this.x + this.drawWidth > canvas.width) this.x = canvas.width - this.drawWidth;
 
-        // choose row by action mapping provided:
-        // row 0 idle, 1 crouch, 2 run, 3 jump
-        if (this.isCrouching && this.y === this.initialY) {
-          this.row = 1; // crouch
-        } else if (this.y < this.initialY) {
-          this.row = 3; // jump
-        } else if (this.isMovingLeft || this.isMovingRight) {
-          this.row = 2; // run
+        // Animation logic
+    // ---------------------------
+    if (this.sprite === kimetsuSprite) {
+    if (!this.animFrame) this.animFrame = 0;
+
+    this.timer++;
+    if (this.timer >= this.step) {
+        this.timer = 0;
+        this.animFrame++;
+    }
+
+    // Stand (0–8 = 9 frames)
+    if (!this.isLeft && !this.isRight && this.y === this.initialY && !this.isDown) {
+        if (this.animFrame >= 9) this.animFrame = 0;
+        this.col = 0 + this.animFrame;
+    }
+    // Run (9–20 = 12 frames)
+    else if (this.isLeft || this.isRight) {
+        if (this.animFrame >= 12) this.animFrame = 0;
+        this.col = 9 + this.animFrame;
+    }
+    // Jump (21–33 = 13 frames)
+    else if (this.y < this.initialY) {
+        if (this.animFrame >= 13) this.animFrame = 0;
+        this.col = 21 + this.animFrame;
+    }
+    // Crouch (57–6 = 9 frames)
+    else if (this.isDown && this.y === this.initialY) {
+        if (this.animFrame >= 9) this.animFrame = 0;
+        this.col = 57 + this.animFrame;
+    }
+
+    this.row = 0; // all frames are on row 0
+
+    } else {
+      // Eren uses row/col system
+      if (this.isDown && this.y === this.initialY) this.row = 1;
+      else if (this.y < this.initialY) this.row = 3;
+      else if (this.isLeft || this.isRight) this.row = 2;
+      else this.row = 0;
+
+      this.timer++;
+      if (this.timer >= this.step) {
+        this.timer = 0;
+        this.col = (this.col + 1) % 12; // loop frames
+      }
+    }
+
+    // survival timer
+    this.survivalTime += dt;
+  };
+
+
+      this.draw = function() {
+        if (!this.alive) return;
+
+        let sx, sy;
+
+        if (this.sprite === kimetsuSprite) {
+            const cols = 10; // kimetsu has 10 columns
+            sx = (this.col % cols) * this.frameWidth;
+            sy = Math.floor(this.col / cols) * this.frameHeight;
         } else {
-          this.row = 0; // idle
+            // Eren (row/col system)
+            sx = this.col * this.frameWidth;
+            sy = this.row * this.frameHeight;
         }
-
-        // animation tick
-        this.timer++;
-        if (this.timer >= this.step) {
-          this.timer = 0;
-          this.col = (this.col + 1) % (
-            this.row === 0 ? this.maxCols.idle  :
-            this.row === 1 ? this.maxCols.crouch:
-            this.row === 2 ? this.maxCols.run   :
-                             this.maxCols.jump
-          );
-        }
-      };
-
-      this.draw = function () {
-        // source rect
-        const sx = this.col * this.frameWidth;
-        const sy = this.row * this.frameHeight;
 
         ctx.save();
-        if (this.facing === "left") {
-          // flip horizontally around the character's left edge
-          ctx.translate(this.x + this.drawWidth, 0);
-          ctx.scale(-1, 1);
-          ctx.drawImage(
-            erenSprite, sx, sy, this.frameWidth, this.frameHeight,
-            0, this.y, this.drawWidth, this.drawHeight
-          );
+        if (this.facing === 'left') {
+            ctx.translate(this.x + this.drawWidth, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(this.sprite, sx, sy, this.frameWidth, this.frameHeight,
+            0, this.y, this.drawWidth, this.drawHeight);
         } else {
-          ctx.drawImage(
-            erenSprite, sx, sy, this.frameWidth, this.frameHeight,
-            this.x, this.y, this.drawWidth, this.drawHeight
-          );
+            ctx.drawImage(this.sprite, sx, sy, this.frameWidth, this.frameHeight,
+            this.x, this.y, this.drawWidth, this.drawHeight);
         }
         ctx.restore();
-      };
 
-      this.jump = function () {
-        if (this.y === this.initialY && !this.isCrouching) {
-          this.yVelocity = -settings.jumpPower;
-        }
-      };
+        // Optional: ID tag
+        ctx.fillStyle = '#111827';
+        ctx.font = '12px Inter';
+        ctx.fillText(`P${this.id}`, this.x + 4, this.y - 6);
+        };
+
+
+      this.jump = function() {
+        if (!this.alive) return;
+        if (this.y === this.initialY && !this.isDown) this.yv = -settings.jumpPower;
+      }
+
+
+      this.getSpriteRect = function() {
+            const padX = 12, padY = 16;   // base padding
+            let hitboxX = this.x + padX;
+            let hitboxY = this.y + padY;
+            let hitboxW = this.drawWidth - padX*2;
+            let hitboxH = this.drawHeight - padY*2;
+
+            // Adjust hitbox specifically for Player 2
+            if (this.id === 2) {
+                hitboxX += 12;      // move 5px to the right
+                hitboxY += 5;       // move 5px down
+                hitboxW -= 60;      // shrink width by 60px
+                hitboxH -= 0;      // shrink height by 0px
+            }
+
+            
+
+            // Only adjust for Player 2 when facing left
+            if (this.id === 2 && this.facing === 'left') {
+                hitboxX += 40; // shift right by 100 pixels (adjust as needed)
+            }
+            return { x: hitboxX, y: hitboxY, w: hitboxW, h: hitboxH };
+        
+        };
+
+
     }
 
-    // ---------------- Obstacles ----------------
-    function Brick(x, y, width, height, speed, color, type, speedX = 0) {
-      this.x = x; this.y = y; this.width = width; this.height = height;
+    // Brick
+    function Brick(x, y, w, h, speed, color, type, speedX = 0) {
+      this.x = x; this.y = y; this.w = w; this.h = h;
       this.speed = speed; this.color = color; this.type = type; this.speedX = speedX;
+      this.falling = false;
+      this.triggeredBy = null;
 
-      this.update = function () {
-        if (this.type === "vertical") this.y += this.speed;
-        else if (this.type === "horizontal") this.x += this.speedX;
-      };
-
-      this.draw = function () {
+      this.update = function() {
+        if (this.type === 'vertical') this.y += this.speed;
+        else if (this.type === 'horizontal') this.x += this.speedX;
+      }
+      this.draw = function() {
         ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, this.width, this.height);
-      };
-    }
-
-    // ---------------- Setup ----------------
-    function init() {
-      canvas.width  = Math.min(800, window.innerWidth);
-      canvas.height = Math.min(600, window.innerHeight);
-
-      score = 0;
-      isGameOver = false;
-      bricks = [];
-      rowSpawnCounter = 0;
-      verticalRowCount = 0;
-
-      // start a bit higher on the screen (not hugging the floor)
-      player = new Player(canvas.width / 2 - 34, canvas.height - 140);
-
-      document.addEventListener("keydown", handleKeyDown);
-      document.addEventListener("keyup", handleKeyUp);
-    }
-
-    // ---------------- Controls ----------------
-    function handleKeyDown(e) {
-      if (gameState === "playing") {
-        if (e.key === "ArrowLeft" || e.key === "a") {
-          player.isMovingLeft = true;
-          player.facing = "left";    // flip on press
-        } else if (e.key === "ArrowRight" || e.key === "d") {
-          player.isMovingRight = true;
-          player.facing = "right";   // face right on press
-        } else if (e.key === " ") {
-          player.jump();
-        } else if (e.key === "ArrowDown" || e.key === "s") {
-          player.isCrouching = true;
-        }
-      } else if (e.key === " " && gameState === "start") {
-        startGame();
-      } else if (e.key === " " && gameState === "gameover") {
-        restartGame();
-      }
-    }
-    function handleKeyUp(e) {
-      if (gameState === "playing") {
-        if (e.key === "ArrowLeft" || e.key === "a")   player.isMovingLeft = false;
-        if (e.key === "ArrowRight" || e.key === "d")  player.isMovingRight = false;
-        if (e.key === "ArrowDown" || e.key === "s")   player.isCrouching = false;
+        ctx.fillRect(this.x, this.y, this.w, this.h);
       }
     }
 
-    // ---------------- Spawning ----------------
+    function padHitbox(p) {
+      const padX = 12, padY = 16;
+      return { x: p.x + padX, y: p.y + padY, w: p.drawWidth - padX*2, h: p.drawHeight - padY*2 };
+    }
+    function aabb(a,b){
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    // Spawning
     function spawnVerticalRow() {
-      const brickWidth = settings.baseBrickSize;
-      const brickHeight = settings.baseBrickSize;
-      const totalBricksInRow = Math.floor(canvas.width / (brickWidth + settings.brickMargin));
+      const bw = settings.baseBrickSize, bh = settings.baseBrickSize;
+      const total = Math.floor(canvas.width / (bw + settings.brickMargin));
 
-      // pick 2 gaps
       const gaps = [];
       while (gaps.length < 2) {
-        const r = Math.floor(Math.random() * totalBricksInRow);
+        const r = Math.floor(Math.random() * total);
         if (!gaps.includes(r)) gaps.push(r);
       }
 
-      const brickColor = `hsl(${Math.random() * 360},70%,50%)`;
-      let currentBrickSpeed = settings.brickSpeed + Math.floor(score / 100) * 0.5;
+      const color = `hsl(${Math.random()*360},70%,50%)`;
+      let spd = settings.brickSpeed + Math.floor(score / 100) * 0.5;
+      if (score >= 600) spd = settings.brickSpeed * 2 + Math.floor(score / 100) * 0.5;
 
-      // faster after high score (optional tweak)
-      if (score >= 600) currentBrickSpeed = settings.brickSpeed * 2 + Math.floor(score / 100) * 0.5;
-
-      for (let i = 0; i < totalBricksInRow; i++) {
+      for (let i=0;i<total;i++){
         if (!gaps.includes(i)) {
-          const x = i * (brickWidth + settings.brickMargin);
-          bricks.push(new Brick(x, -brickHeight, brickWidth, brickHeight, currentBrickSpeed, brickColor, "vertical"));
+          const x = i * (bw + settings.brickMargin);
+          bricks.push(new Brick(x, -bh, bw, bh, spd, color, 'vertical'));
         }
       }
       verticalRowCount++;
     }
 
     function spawnHorizontalObstacle() {
-      const brickWidth = 50, brickHeight = 40;
-      let brickSpeed = 6;
-      if (score >= 400) brickSpeed = 12;
-      else if (score >= 250) brickSpeed = 6;
+      const bw = 50, bh = 40;
+      let spd = 6;
+      if (score >= 400) spd = 12;
+      else if (score >= 250) spd = 6;
 
-      const startX = Math.random() < 0.5 ? -brickWidth : canvas.width;
-      const speedX = startX === -brickWidth ? brickSpeed : -brickSpeed;
-      const yPosition = canvas.height - 110; // aligned with slightly higher player
+      const startX = Math.random() < 0.5 ? -bw : canvas.width;
+      const speedX = startX === -bw ? spd : -spd;
+      const y = canvas.height - 110;
 
-      bricks.push(new Brick(startX, yPosition, brickWidth, brickHeight, 0, "#cc3333", "horizontal", speedX));
+      bricks.push(new Brick(startX, y, bw, bh, 0, '#cc3333', 'horizontal', speedX));
       verticalRowCount = 0;
     }
 
-    // ---------------- Collision (tighter hitbox) ----------------
-    function checkCollision(obstacle, player) {
-      // shrink hitbox so only visible body counts (avoid transparent padding)
-      const padX = 12, padY = 16;
-      const px = player.x + padX;
-      const py = player.y + padY;
-      const pw = player.drawWidth  - padX * 2;
-      const ph = player.drawHeight - padY * 2;
-
-      return (
-        px < obstacle.x + obstacle.width &&
-        px + pw > obstacle.x &&
-        py < obstacle.y + obstacle.height &&
-        py + ph > obstacle.y
-      );
+    function drawHUD() {
+      ctx.fillStyle = '#111827';
+      ctx.font = '20px Inter';
+      ctx.textAlign = 'left';
+      ctx.fillText(`Score: ${Math.floor(score)}`, 16, 32);
     }
 
-    // ---------------- HUD ----------------
-    function drawScore() {
-      ctx.fillStyle = "#333";
-      ctx.font = "24px Inter";
-      ctx.textAlign = "right";
-      ctx.fillText(`Score: ${Math.floor(score)}`, canvas.width - 20, 40);
+    function everyoneDead() {
+      return players.filter(p => p.alive).length === 0;
+    }
+    function aliveCount() {
+      return players.filter(p => p.alive).length;
     }
 
-    // ---------------- Main Loop ----------------
-    function gameLoop() {
-      if (isGameOver) { cancelAnimationFrame(animationFrameId); return; }
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function endGameCompetitiveIfNeeded() {
+      const alive = players.filter(p => p.alive);
+      if (mode === 'multi' || mode === 'triple') {
+        if (alive.length <= 1) {
+          isOver = true;
+          gameState = 'gameover';
+          showResultsCompetitive(alive[0] || null);
+          return true;
+        }
+      }
+      return false;
+    }
 
-      player.update();
-      player.draw();
+    function showResultsCompetitive(winner) {
+      // Placements from deathOrder (earliest death = lower placement)
+      const allIds = players.map(p=>p.id);
+      const eliminatedIds = deathOrder.map(d=>d.id);
+      const survivorIds = allIds.filter(id => !eliminatedIds.includes(id));
+      const placements = [];
 
-      // spawn pacing
+      // Losers in reverse death time (last to die ranks higher among eliminated)
+      const deathsSorted = [...deathOrder].sort((a,b)=>a.time - b.time); // first to die first
+      const losers = deathsSorted.map(d => d.id);
+
+      // If a winner exists, they are first
+      if (winner) placements.push(winner.id);
+
+      // Then remaining survivors (should be none, but safe)
+      placements.push(...survivorIds.filter(id => id !== (winner && winner.id)));
+
+      // Then losers from last to first for 2nd/3rd etc
+      placements.push(...losers.reverse().filter(id => !placements.includes(id)));
+
+      // Build table
+      const rankLabel = (i) => (i===0?'1st':i===1?'2nd':'3rd');
+      let html = '';
+      html += `<p class="mb-2"><strong>Mode:</strong> ${mode==='multi'?'Multiplayer (2P)':'Triple Player (3P)'} • <strong>Score:</strong> ${Math.floor(score)}</p>`;
+      html += `<table class="table"><thead><tr><th>Place</th><th>Player</th><th>Survival (s)</th></tr></thead><tbody>`;
+      placements.forEach((pid, idx) => {
+        const p = players.find(pp=>pp.id===pid);
+        const secs = Math.max(0, Math.round(p.survivalTime/100)/10); // one decimal
+        html += `<tr><td>${rankLabel(idx)}</td><td>P${pid}</td><td>${secs}</td></tr>`;
+      });
+      html += `</tbody></table>`;
+      resultsBlock.innerHTML = html;
+      gameOver.classList.add('show');
+      ingameMenuBtn.style.display = 'none';
+    }
+
+    function showResultsCoopOrSolo(loserId=null) {
+      let title = mode==='solo' ? 'Game Over' : 'Co-op Game Over';
+      const secs = Math.max(0, Math.round(Math.max(...players.map(p=>p.survivalTime))/100)/10);
+      const who = loserId ? ` • Player ${loserId} was hit` : '';
+      const html = `
+        <p class="mb-2"><strong>${title}</strong>${who}</p>
+        <p class="mb-2"><strong>Score:</strong> ${Math.floor(score)}</p>
+        <table class="table"><thead><tr><th>Player</th><th>Survival (s)</th></tr></thead>
+        <tbody>
+          ${players.map(p=>`<tr><td>P${p.id}</td><td>${Math.round(p.survivalTime/100)/10}</td></tr>`).join('')}
+        </tbody></table>
+      `;
+      resultsBlock.innerHTML = html;
+      gameOver.classList.add('show');
+      ingameMenuBtn.style.display = 'none';
+    }
+
+    function resetCommon() {
+      score = 0;
+      bricks = [];
+      rowSpawnCounter = 0;
+      verticalRowCount = 0;
+      isOver = false;
+      deathOrder = [];
+      lastTimestamp = performance.now();
+      resize();
+    }
+
+    function initPlayersForMode() {
+      players = [];
+      const groundY = canvas.height - 140;
+      if (mode === 'solo') {
+        players.push(new Player(1, canvas.width/2 - 34, groundY, { left:'a', right:'d', down:'s', up:'w' }));
+      } else if (mode === 'coop' || mode === 'multi') {
+        players.push(new Player(1, canvas.width/3 - 34, groundY, { left:'a', right:'d', down:'s', up:'w' }));
+        players.push(new Player(
+        2,
+        canvas.width*2/3 - 34,
+        groundY,
+        { left:'ArrowLeft', right:'ArrowRight', down:'ArrowDown', up:'ArrowUp' },
+        kimetsuSprite, // sprite
+        100,           // frame width
+        64             // frame height
+        ));
+      } else { // triple
+        players.push(new Player(1, canvas.width/4 - 34, groundY, { left:'a', right:'d', down:'s', up:'w' }));
+        players.push(new Player(
+        2,
+        canvas.width*2/3 - 34,
+        groundY,
+        { left:'ArrowLeft', right:'ArrowRight', down:'ArrowDown', up:'ArrowUp' },
+        kimetsuSprite, // sprite
+        100,           // frame width
+        64             // frame height
+        ));
+        players.push(new Player(3, canvas.width*3/4 - 34, groundY, { left:'j', right:'l', down:'k', up:'i' }));
+      }
+    }
+
+    function startGame() {
+      menu.classList.remove('show');
+      instructions.classList.remove('show');
+      gameOver.classList.remove('show');
+      pauseOverlay.classList.remove('show');
+
+      resetCommon();
+      initPlayersForMode();
+      gameState = 'playing';
+      ingameMenuBtn.style.display = 'block';
+
+      if (!listenersAdded) {
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+        ingameMenuBtn.addEventListener('click', onMenuClick);
+        resumeBtn.addEventListener('click', resumeFromPause);
+        restartBtn.addEventListener('click', restartSameMode);
+        toMenuBtn.addEventListener('click', backToMainMenu);
+        playAgainBtn.addEventListener('click', restartSameMode);
+        gameOverMenuBtn.addEventListener('click', backToMainMenu);
+        listenersAdded = true;
+      }
+
+      lastTimestamp = performance.now();
+      loop();
+    }
+
+    function pauseGame() {
+      if (gameState !== 'playing') return;
+      gameState = 'paused';
+      pauseOverlay.classList.add('show');
+    }
+    function resumeFromPause() {
+      if (gameState !== 'paused') return;
+      gameState = 'playing';
+      pauseOverlay.classList.remove('show');
+      lastTimestamp = performance.now();
+      loop();
+    }
+    function onMenuClick() { pauseGame(); }
+
+    function restartSameMode() {
+      pauseOverlay.classList.remove('show');
+      gameOver.classList.remove('show');
+      startGame(); // uses existing `mode`
+    }
+    function backToMainMenu() {
+      cancelAnimationFrame(rafId);
+      gameOver.classList.remove('show');
+      pauseOverlay.classList.remove('show');
+      ingameMenuBtn.style.display = 'none';
+      gameState = 'menu';
+      menu.classList.add('show');
+      resize();
+    }
+
+    // Input
+    function onKeyDown(e) {
+      if (gameState === 'playing') {
+        if (e.key === 'Escape') { pauseGame(); return; }
+        players.forEach(p => {
+          if (!p.alive) return;
+          if (e.key === p.controls.left)  { p.isLeft = true;  p.facing = 'left'; }
+          if (e.key === p.controls.right) { p.isRight = true; p.facing = 'right'; }
+          if (e.key === p.controls.down)  { p.isDown = true; }
+          if (e.key.toLowerCase() === p.controls.up) { p.jump(); }
+          if (e.key === p.controls.up) { p.jump(); } // handle ArrowUp as well
+        });
+      } else if (gameState === 'menu' && e.key === 'Enter' && mode) {
+        startGame();
+      }
+    }
+    function onKeyUp(e) {
+      if (gameState !== 'playing') return;
+      players.forEach(p => {
+        if (e.key === p.controls.left)  p.isLeft = false;
+        if (e.key === p.controls.right) p.isRight = false;
+        if (e.key === p.controls.down)  p.isDown = false;
+      });
+    }
+
+    function pixelPerfectCollision(player, brick, ctx) {
+    // Only check overlapping region
+    const rect = player.getSpriteRect();
+    const startX = Math.max(rect.x, brick.x);
+    const startY = Math.max(rect.y, brick.y);
+    const endX   = Math.min(rect.x + rect.w, brick.x + brick.w);
+    const endY   = Math.min(rect.y + rect.h, brick.y + brick.h);
+
+
+    if (startX >= endX || startY >= endY) return false; // no overlap
+
+    // Offscreen canvas for sprite
+    const off = document.createElement('canvas');
+    off.width = player.frameWidth;
+    off.height = player.frameHeight;
+    const offCtx = off.getContext('2d');
+
+    // Draw sprite frame
+    let sx, sy;
+    if (player.sprite === kimetsuSprite) {
+        const cols = 10;
+        sx = (player.col % cols) * player.frameWidth;
+        sy = Math.floor(player.col / cols) * player.frameHeight;
+    } else {
+        sx = player.col * player.frameWidth;
+        sy = player.row * player.frameHeight;
+    }
+    offCtx.drawImage(player.sprite, sx, sy, player.frameWidth, player.frameHeight, 0, 0, player.frameWidth, player.frameHeight);
+
+    const data = offCtx.getImageData(0, 0, player.frameWidth, player.frameHeight).data;
+
+    // Loop only over overlapping pixels
+    for (let y = startY; y < endY; y++) {
+        for (let x = startX; x < endX; x++) {
+        const px = Math.floor((x - player.x) / player.drawWidth * player.frameWidth);
+        const py = Math.floor((y - player.y) / player.drawHeight * player.frameHeight);
+        const idx = (py * player.frameWidth + px) * 4;
+        const alpha = data[idx + 3];
+        if (alpha > 0) {
+            return true;
+        }
+        }
+    }
+
+    return false;
+    }
+
+
+    function updateAndDrawBricksAndCollisions() {
+      // Trigger fast-fall when brick reaches any player's Y
+      for (const brick of bricks) {
+        if (brick.type === 'vertical' && !brick.falling) {
+          // Check against alive players
+          for (const p of players) {
+            if (!p.alive) continue;
+            if (brick.y >= p.y) {
+              brick.falling = true;
+              brick.speed = settings.fastFallSpeed;
+              brick.triggeredBy = p.id;
+              break;
+            }
+          }
+        }
+      }
+
+      // Update + draw
+      for (let i = bricks.length - 1; i >= 0; i--) {
+        const b = bricks[i];
+        b.update();
+        b.draw();
+
+        // Check collisions with players
+        for (const p of players) {
+          if (!p.alive) continue;
+          if (pixelPerfectCollision(p, b, ctx)) {
+            // collision logic remains the same
+            if (mode === 'coop') {
+                if (b.type === 'vertical' && b.falling && b.triggeredBy !== null && b.triggeredBy !== p.id) {
+                continue; // immunity
+                }
+                isOver = true; gameState = 'gameover';
+                showResultsCoopOrSolo(p.id);
+                return;
+            }
+            if (mode === 'solo') {
+                isOver = true; gameState = 'gameover';
+                showResultsCoopOrSolo(1);
+                return;
+            }
+            p.alive = false;
+            deathOrder.push({ id:p.id, time: performance.now() - startTimeMs });
+            if (endGameCompetitiveIfNeeded()) return;
+            }
+
+        }
+
+        // Cleanup off-screen
+        if (b.type === 'vertical' && b.y > canvas.height) bricks.splice(i,1);
+        if (b.type === 'horizontal' && (b.x + b.w < 0 || b.x > canvas.width)) bricks.splice(i,1);
+      }
+    }
+
+    let startTimeMs = 0;
+    function loop(ts) {
+      if (gameState !== 'playing') { cancelAnimationFrame(rafId); return; }
+      rafId = requestAnimationFrame(loop);
+
+      const now = performance.now();
+      const dt = now - lastTimestamp; // ms
+      lastTimestamp = now;
+      if (!startTimeMs) startTimeMs = now;
+
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      // Update players
+      players.forEach(p => p.update(dt));
+
+        // DEBUG: draw hitboxes
+        players.forEach(p => {
+            if (!p.alive) return;
+            const hb = p.getSpriteRect();
+            ctx.save();
+            ctx.fillStyle = 'rgba(255,0,0,0.2)';
+            ctx.fillRect(hb.x, hb.y, hb.w, hb.h);
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(hb.x, hb.y, hb.w, hb.h);
+            ctx.restore();
+        });
+
+      // Spawning pacing
       rowSpawnCounter++;
-      let currentSpawnRate = Math.max(settings.rowSpawnRate - Math.floor(score / 50) * 5, 60);
-      if (score >= 600) currentSpawnRate = 120; // optional fixed faster rate later
-
-      if (rowSpawnCounter >= currentSpawnRate) {
+      let spawnRate = Math.max(settings.rowSpawnRate - Math.floor(score / 50) * 5, 60);
+      if (score >= 600) spawnRate = 120;
+      if (rowSpawnCounter >= spawnRate) {
         if (verticalRowCount < 3) spawnVerticalRow();
         else spawnHorizontalObstacle();
         rowSpawnCounter = 0;
       }
 
-      // update/draw obstacles
-      for (let i = bricks.length - 1; i >= 0; i--) {
-        const brick = bricks[i];
+      // Bricks + collisions
+      updateAndDrawBricksAndCollisions();
+      if (isOver) return;
 
-        // --- RESTORED: when a vertical brick row reaches player's Y, drop fast ---
-        if (brick.type === "vertical" && brick.y >= player.y) {
-          brick.speed = 30; // “completely come down”
-        }
+      // Draw players
+      players.forEach(p => p.draw());
 
-        brick.update();
-        brick.draw();
-
-        // collision check with tighter hitbox
-        if (checkCollision(brick, player)) {
-          isGameOver = true;
-          gameState = "gameover";
-          showGameOverScreen();
-          break;
-        }
-
-        // cleanup off-screen
-        if (brick.type === "vertical" && brick.y > canvas.height) bricks.splice(i, 1);
-        if (brick.type === "horizontal" && (brick.x + brick.width < 0 || brick.x > canvas.width)) bricks.splice(i, 1);
-      }
-
+      // Score
       score += 0.1;
-      drawScore();
-      animationFrameId = requestAnimationFrame(gameLoop);
+      drawHUD();
     }
 
-    // ---------------- State transitions ----------------
-    function startGame() {
-      startScreen.style.display = "none";
-      gameOverScreen.style.display = "none";
-      gameState = "playing";
-      init();
-      gameLoop();
-    }
-    function restartGame() { startGame(); }
-    function showGameOverScreen() {
-      finalScoreElement.textContent = Math.floor(score);
-      gameOverScreen.style.display = "flex";
-    }
+    /* ---------- MENU WIRING ---------- */
+    let selectedChip = null;
+    modeChips.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        modeChips.querySelectorAll('.chip').forEach(c=>c.classList.remove('selected'));
+        chip.classList.add('selected');
+        selectedChip = chip.dataset.mode;
+        mode = selectedChip;
+        startBtn.disabled = false;
+      });
+    });
+    instructionsBtn.addEventListener('click', () => {
+      menu.classList.remove('show');
+      instructions.classList.add('show');
+      gameState = 'instructions';
+    });
+    backFromInstructions.addEventListener('click', () => {
+      instructions.classList.remove('show');
+      menu.classList.add('show');
+      gameState = 'menu';
+    });
+    startBtn.addEventListener('click', () => { if (mode) startGame(); });
 
-    // bootstrap
-    init();
-    startButton.addEventListener("click", startGame);
-    restartButton.addEventListener("click", restartGame);
-    window.addEventListener("resize", () => { if (gameState !== "playing") init(); });
+    // Also allow ESC in playing mode to pause
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && gameState === 'playing') pauseGame();
+    });
+
   })();
   </script>
 </body>
