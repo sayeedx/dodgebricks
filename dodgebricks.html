@@ -181,6 +181,10 @@
     const rengokuSprite = new Image();
     rengokuSprite.src = 'rengoku.png';
 
+    const cursedImg = new Image();
+    cursedImg.src = "cursed.png";
+
+
     // State
     const settings = {
       playerSpeed: 8,
@@ -370,6 +374,17 @@
 
     // survival timer
     this.survivalTime += dt;
+
+     // --- CURSED SPRITE FRAME CYCLING ---
+    if (!this.cursedFrame) this.cursedFrame = 0;
+    if (!this.cursedTimer) this.cursedTimer = 0;
+
+    this.cursedTimer++;
+    if (this.cursedTimer >= this.step) {
+        this.cursedTimer = 0;
+        this.cursedFrame = (this.cursedFrame + 1) % 6; // loop 0..5
+    }
+    
   };
 
 
@@ -465,19 +480,73 @@
 
     // Brick
     function Brick(x, y, w, h, speed, color, type, speedX = 0) {
-      this.x = x; this.y = y; this.w = w; this.h = h;
-      this.speed = speed; this.color = color; this.type = type; this.speedX = speedX;
-      this.falling = false;
-      this.triggeredBy = null;
+        this.x = x; this.y = y; this.w = w; this.h = h;
+        this.speed = speed; this.color = color; this.type = type; this.speedX = speedX;
+        this.falling = false;
+        this.triggeredBy = null;
 
-      this.update = function() {
-        if (this.type === 'vertical') this.y += this.speed;
-        else if (this.type === 'horizontal') this.x += this.speedX;
-      }
-      this.draw = function() {
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, this.w, this.h);
-      }
+        // animation state (only for horizontal bricks)
+        this.cursedFrame = 0;
+        this.frameTimer = 0;
+        this.frameInterval = 8; 
+        this.isRight = true;
+        this.isLeft = false;
+
+        this.update = function() {
+            if (this.type === 'vertical') {
+            this.y += this.speed;
+            } else if (this.type === 'horizontal') {
+            this.x += this.speedX;
+
+            // set direction flags from movement
+            if (this.speedX > 0) {
+                this.isRight = true;
+                this.isLeft = false;
+            } else if (this.speedX < 0) {
+                this.isRight = false;
+                this.isLeft = true;
+            }
+
+            // frame update logic
+            this.frameTimer++;
+            if (this.frameTimer >= this.frameInterval) {
+                this.cursedFrame = (this.cursedFrame + 1) % 6; 
+                this.frameTimer = 0;
+            }
+            }
+        }
+
+        this.draw = function() {
+        if (this.type === 'horizontal') {
+            let frameX = this.cursedFrame * 134;
+            let frameY = 0;
+
+            let drawWidth = 134 * 1.35;  // double width
+            let drawHeight = 85 * 1.35;  // double height
+
+            if (this.isRight) {
+                ctx.drawImage(
+                    cursedImg,
+                    frameX, frameY, 134, 85,
+                    this.x, this.y, drawWidth, drawHeight
+                );
+            } else if (this.isLeft) {
+                ctx.save();
+                ctx.scale(-1, 1);
+                ctx.drawImage(
+                    cursedImg,
+                    frameX, frameY, 134, 85,
+                    -this.x - drawWidth, this.y, drawWidth, drawHeight
+                );
+                ctx.restore();
+            }
+        } else {
+            // vertical stays simple rectangle
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.w, this.h);
+        }
+    }
+
     }
 
     function padHitbox(p) {
@@ -512,19 +581,27 @@
       verticalRowCount++;
     }
 
+    // Spawning horizontal obstacle
     function spawnHorizontalObstacle() {
-      const bw = 50, bh = 40;
-      let spd = 6;
-      if (score >= 400) spd = 12;
-      else if (score >= 250) spd = 6;
+        const bw = 50 * 1.35; // double width
+        const bh = 40 * 1.35; // double height
+        let spd = 6;
+        if (score >= 400) spd = 12;
+        else if (score >= 250) spd = 6;
 
-      const startX = Math.random() < 0.5 ? -bw : canvas.width;
-      const speedX = startX === -bw ? spd : -spd;
-      const y = canvas.height - 110;
+        // randomly choose spawn side: left or right
+        const spawnLeft = Math.random() < 0.5;
 
-      bricks.push(new Brick(startX, y, bw, bh, 0, '#cc3333', 'horizontal', speedX));
-      verticalRowCount = 0;
+        const startX = spawnLeft ? -bw : canvas.width;
+        const speedX = spawnLeft ? spd : -spd;
+
+        // raised 30px higher than before
+        const y = canvas.height - 110 - 60;
+
+        bricks.push(new Brick(startX, y, bw, bh, 0, '#cc3333', 'horizontal', speedX));
+        verticalRowCount = 0;
     }
+
 
     function drawHUD() {
       ctx.fillStyle = '#111827';
