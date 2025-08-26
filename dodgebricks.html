@@ -226,6 +226,20 @@
       this.drawHeight = frameH * 1.2;
       this.frameWidth = frameW;
       this.frameHeight = frameH;
+      // --- PLAYER-SPECIFIC ADJUSTMENTS ---
+        if (this.id === 1) {
+            // Move Player 1 up a bit
+            this.y -= 10;          
+            this.initialY -= 15;   // adjust ground level too
+            // Scale Player 1 slightly bigger in width
+            this.drawWidth *= 1.2;
+            this.drawHeight *= 1.1;
+        }
+        if (this.id === 2) {
+            // Scale Player 2 slightly bigger
+            this.drawWidth *= 1.2;
+            this.drawHeight *= 1.2;
+        }
       this.isLeft = false; this.isRight = false; this.isDown = false;
       this.facing = 'right';
       this.yv = 0;
