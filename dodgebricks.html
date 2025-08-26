@@ -178,6 +178,8 @@
     const kimetsuSprite = new Image();
     kimetsuSprite.src = 'kimetsu.png';
 
+    const rengokuSprite = new Image();
+    rengokuSprite.src = 'rengoku.png';
 
     // State
     const settings = {
@@ -240,6 +242,13 @@
             this.drawWidth *= 1.2;
             this.drawHeight *= 1.2;
         }
+        if (this.id === 3) {
+            // Scale Player 3 slightly bigger
+            this.y -= 8;          
+            this.initialY -= 10;   // adjust ground level too
+            this.drawWidth *= 1.1;
+            this.drawHeight *= 1.2;
+        }
       this.isLeft = false; this.isRight = false; this.isDown = false;
       this.facing = 'right';
       this.yv = 0;
@@ -264,49 +273,99 @@
         // Animation logic
     // ---------------------------
     if (this.sprite === kimetsuSprite) {
-    if (!this.animFrame) this.animFrame = 0;
+        if (!this.animFrame) this.animFrame = 0;
 
-    this.timer++;
-    if (this.timer >= this.step) {
-        this.timer = 0;
-        this.animFrame++;
-    }
+        this.timer++;
+        if (this.timer >= this.step) {
+            this.timer = 0;
+            this.animFrame++;
+        }
 
-    // Stand (0–8 = 9 frames)
-    if (!this.isLeft && !this.isRight && this.y === this.initialY && !this.isDown) {
-        if (this.animFrame >= 9) this.animFrame = 0;
-        this.col = 0 + this.animFrame;
-    }
-    // Run (9–20 = 12 frames)
-    else if (this.isLeft || this.isRight) {
-        if (this.animFrame >= 12) this.animFrame = 0;
-        this.col = 9 + this.animFrame;
-    }
-    // Jump (21–33 = 13 frames)
-    else if (this.y < this.initialY) {
-        if (this.animFrame >= 13) this.animFrame = 0;
-        this.col = 21 + this.animFrame;
-    }
-    // Crouch (57–6 = 9 frames)
-    else if (this.isDown && this.y === this.initialY) {
-        if (this.animFrame >= 9) this.animFrame = 0;
-        this.col = 57 + this.animFrame;
-    }
+        // Stand (0–8 = 9 frames)
+        if (!this.isLeft && !this.isRight && this.y === this.initialY && !this.isDown) {
+            if (this.animFrame >= 9) this.animFrame = 0;
+            this.col = 0 + this.animFrame;
+        }
+        // Run (9–20 = 12 frames)
+        else if (this.isLeft || this.isRight) {
+            if (this.animFrame >= 12) this.animFrame = 0;
+            this.col = 9 + this.animFrame;
+        }
+        // Jump (21–33 = 13 frames)
+        else if (this.y < this.initialY) {
+            if (this.animFrame >= 13) this.animFrame = 0;
+            this.col = 21 + this.animFrame;
+        }
+        // Crouch (57–63 = 9 frames)
+        else if (this.isDown && this.y === this.initialY) {
+            if (this.animFrame >= 9) this.animFrame = 0;
+            this.col = 57 + this.animFrame;
+        }
 
-    this.row = 0; // all frames are on row 0
+        this.row = 0; // all frames are on row 0
 
+    } else if (this.sprite === rengokuSprite) {
+        if (!this.animFrame) this.animFrame = 0;
+
+        this.timer++;
+        if (this.timer >= this.step) {
+            this.timer = 0;
+            this.animFrame++;
+        }
+
+        // Standing (frames 0–3)
+        if (!this.isLeft && !this.isRight && this.y === this.initialY && !this.isDown) {
+            if (this.animFrame < 0 || this.animFrame > 3) this.animFrame = 0;
+            this.col = this.animFrame;
+        }
+        // Running (frames 5–13)
+        else if (this.isLeft || this.isRight) {
+            if (this.animFrame < 5 || this.animFrame > 13) this.animFrame = 5;
+            this.col = this.animFrame;
+        }
+        // Jump (frames 23–34)
+        else if (this.y < this.initialY) {
+            if (this.animFrame < 26 || this.animFrame > 34) this.animFrame = 26;
+            this.col = this.animFrame;
+        }
+        // Crouch (frames 53–59)
+        else if (this.isDown && this.y === this.initialY) {
+            if (this.animFrame < 53 || this.animFrame > 59) this.animFrame = 53;
+            this.col = this.animFrame;
+        }
     } else {
-      // Eren uses row/col system
-      if (this.isDown && this.y === this.initialY) this.row = 1;
-      else if (this.y < this.initialY) this.row = 3;
-      else if (this.isLeft || this.isRight) this.row = 2;
-      else this.row = 0;
+        if (!this.animFrame) this.animFrame = 0;
 
-      this.timer++;
-      if (this.timer >= this.step) {
-        this.timer = 0;
-        this.col = (this.col + 1) % 12; // loop frames
-      }
+        this.timer++;
+        if (this.timer >= this.step) {
+            this.timer = 0;
+            this.animFrame++;
+        }
+
+        // Stand
+        if (!this.isLeft && !this.isRight && this.y === this.initialY && !this.isDown) {
+            this.row = 0;
+            if (this.animFrame > 5) this.animFrame = 0;
+            this.col = this.animFrame;
+        }
+        // Run
+        else if (this.isLeft || this.isRight) {
+            this.row = 2;
+            if (this.animFrame > 11) this.animFrame = 0;
+            this.col = this.animFrame;
+        }
+        // Jump
+        else if (this.y < this.initialY) {
+            this.row = 3;
+            if (this.animFrame > 7) this.animFrame = 0;
+            this.col = this.animFrame;
+        }
+        // Crouch
+        else if (this.isDown && this.y === this.initialY) {
+            this.row = 1;
+            if (this.animFrame > 5) this.animFrame = 0;
+            this.col = this.animFrame;
+        }
     }
 
     // survival timer
@@ -321,6 +380,10 @@
 
         if (this.sprite === kimetsuSprite) {
             const cols = 10; // kimetsu has 10 columns
+            sx = (this.col % cols) * this.frameWidth;
+            sy = Math.floor(this.col / cols) * this.frameHeight;
+        } else if (this.sprite === rengokuSprite) {
+            const cols = 8; // given in your spec
             sx = (this.col % cols) * this.frameWidth;
             sy = Math.floor(this.col / cols) * this.frameHeight;
         } else {
@@ -362,8 +425,21 @@
             let hitboxH = this.drawHeight - padY*2;
 
             // Adjust hitbox specifically for Player 2
+            if (this.id === 1) {
+                hitboxY += 5;       // move 5px down
+            }
+
+            // Adjust hitbox specifically for Player 2
             if (this.id === 2) {
-                hitboxX += 12;      // move 5px to the right
+                hitboxX += 12;      // move 12px to the right
+                hitboxY -= 5;       // move 5px up
+                hitboxW -= 60;      // shrink width by 60px
+                hitboxH -= 0;      // shrink height by 0px
+            }
+
+            // Adjust hitbox specifically for Player 3
+            if (this.id === 3) {
+                hitboxX += 14;      // move 14px to the right
                 hitboxY += 5;       // move 5px down
                 hitboxW -= 60;      // shrink width by 60px
                 hitboxH -= 0;      // shrink height by 0px
@@ -375,6 +451,11 @@
             if (this.id === 2 && this.facing === 'left') {
                 hitboxX += 40; // shift right by 100 pixels (adjust as needed)
             }
+            // Only adjust for Player 3 when facing left
+            if (this.id === 3 && this.facing === 'left') {
+                hitboxX += 30; // shift right by 100 pixels (adjust as needed)
+            }
+
             return { x: hitboxX, y: hitboxY, w: hitboxW, h: hitboxH };
         
         };
@@ -563,7 +644,15 @@
         100,           // frame width
         64             // frame height
         ));
-        players.push(new Player(3, canvas.width*3/4 - 34, groundY, { left:'j', right:'l', down:'k', up:'i' }));
+        players.push(new Player(
+        3,
+        canvas.width*3/4 - 34,
+        groundY,
+        { left:'j', right:'l', down:'k', up:'i' },
+        rengokuSprite, // use Rengoku sprite
+        105,           // frame width
+        68             // frame height
+        ));
       }
     }
 
