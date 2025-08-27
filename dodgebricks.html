@@ -70,6 +70,9 @@
         <div class="row mb-6">
           <button id="instructionsBtn" class="btn btn-ghost">Instructions</button>
           <button id="startBtn" class="btn btn-primary" disabled>Start</button>
+          <label>
+            <input type="checkbox" id="debugHitboxes"> Show Hitboxes
+          </label>
         </div>
 
         <div class="text-sm opacity-80 leading-relaxed">
@@ -249,7 +252,7 @@
       visible: false,
       x: 0,
       y: 0,
-      drawScale: 1.0,
+      drawScale: 1.25,
       active: false,
     };
 
@@ -535,6 +538,7 @@
         this.isRight = true;
         this.isLeft = false;
 
+
         this.update = function() {
             if (this.type === 'vertical') {
             this.y += this.speed;
@@ -567,19 +571,19 @@
             let drawWidth = 134 * 1.35;  // double width
             let drawHeight = 85 * 1.35;  // double height
 
-            if (this.isRight) {
+            if (this.isRight) { //left to right
                 ctx.drawImage(
                     cursedImg,
                     frameX, frameY, 134, 85,
-                    this.x, this.y, drawWidth, drawHeight
+                    this.x - 45, this.y, drawWidth, drawHeight //adjust this.x for x position, and this.y for y position, minus is moving right, plus is moving left I think
                 );
-            } else if (this.isLeft) {
+            } else if (this.isLeft) { //right to left
                 ctx.save();
                 ctx.scale(-1, 1);
                 ctx.drawImage(
                     cursedImg,
                     frameX, frameY, 134, 85,
-                    -this.x - drawWidth, this.y, drawWidth, drawHeight
+                    -this.x - drawWidth + 25, this.y, drawWidth, drawHeight
                 );
                 ctx.restore();
             }
@@ -644,22 +648,25 @@
         // --- NEW: If spawnLeft, show Skel first (28 frames) at leftmost side, then spawn the horizontal ---
         // If a pendingCursed is already queued, skip creating another until resolved
         if (spawnLeft) {
-          // Schedule a pending cursed spawn and start Skel animation
-          if (!pendingCursed) {
-            pendingCursed = { spawnLeft: true, bw, bh, speedX, y };
+            // This is the new logic for the left side, mimicking the original 'else' block
             // Initialize skel to appear at leftmost edge
-            skel.x = 0; // leftmost position
-            skel.y = canvas.height - skel.frameHeight * skel.drawScale - 30;
+            skel.x = -350; // leftmost position
+            skel.y = canvas.height - skel.frameHeight * skel.drawScale - 25;
             skel.currentFrame = 0;
             skel.frameCounter = 0;
             skel.visible = true;
             skel.active = true;
-          }
+
+            // 930 millisecond delay
+            setTimeout(() => {
+                bricks.push(new Brick(startX, y, bw+25, bh+20, 0, '#cc3333', 'horizontal', speedX)); //bw adjust width of hitbox and bh adjust height of hitbox
+                verticalRowCount = 0;
+            }, 930);
         } else {
           // spawn immediately when coming from right
             // Initialize skel to appear at rightmost edge
-            skel.x = canvas.width - skel.frameWidth * skel.drawScale; // rightmost position
-            skel.y = canvas.height - skel.frameHeight * skel.drawScale - 30;
+            skel.x = canvas.width - skel.frameWidth * skel.drawScale + 350; // rightmost position
+            skel.y = canvas.height - skel.frameHeight * skel.drawScale - 25;
             skel.currentFrame = 0;
             skel.frameCounter = 0;
             skel.visible = true;
@@ -667,7 +674,7 @@
 
           // 930 millisecond delay
           setTimeout(() => {
-            bricks.push(new Brick(startX, y, bw, bh, 0, '#cc3333', 'horizontal', speedX));
+            bricks.push(new Brick(startX, y, bw+25, bh+20, 0, '#cc3333', 'horizontal', speedX));
             verticalRowCount = 0;
           }, 930);
         }
@@ -1064,19 +1071,35 @@
       // Update players
       players.forEach(p => p.update(dt));
 
+      if (debugHitboxes) {
+    // draw player and brick hitboxes here
+
         // DEBUG: draw hitboxes
         players.forEach(p => {
             if (!p.alive) return;
             const hb = p.getSpriteRect();
             ctx.save();
-            ctx.fillStyle = 'rgba(255,0,0,0.2)';
+            ctx.fillStyle = 'rgba(0,255,0,0.2)';
             ctx.fillRect(hb.x, hb.y, hb.w, hb.h);
-            ctx.strokeStyle = 'red';
+            ctx.strokeStyle = 'green';
             ctx.lineWidth = 2;
             ctx.strokeRect(hb.x, hb.y, hb.w, hb.h);
             ctx.restore();
         });
 
+        // DEBUG: draw horizontal brick hitboxes
+        bricks.forEach(brick => {
+            if (brick.type === 'horizontal') {
+                ctx.save();
+                ctx.fillStyle = 'rgba(255,0,0,0.2)'; // Use a different color for clarity, inside the border
+                ctx.fillRect(brick.x, brick.y, brick.w, brick.h);
+                ctx.strokeStyle = 'red'; //border color
+                ctx.lineWidth = 2;
+                ctx.strokeRect(brick.x, brick.y, brick.w, brick.h);
+                ctx.restore();
+            }
+        });
+      }
       // Spawning pacing
       rowSpawnCounter++;
       let spawnRate = Math.max(settings.rowSpawnRate - Math.floor(score / 50) * 5, 60);
@@ -1128,6 +1151,13 @@
     });
 
   })();
+
+    let debugHitboxes = false;
+
+    const debugCheckbox = document.getElementById('debugHitboxes');
+    debugCheckbox.addEventListener('change', () => {
+        debugHitboxes = debugCheckbox.checked;
+    });
   </script>
 </body>
 </html>
