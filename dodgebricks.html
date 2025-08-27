@@ -196,6 +196,8 @@
     const cursedImg = new Image();
     cursedImg.src = "cursed.png";
 
+    const skelImage = new Image();
+    skelImage.src = "skel.png";
 
     // State
     const settings = {
@@ -226,11 +228,40 @@
     // Competitive stats
     let deathOrder = []; // {id, time}
 
+    // --- NEW: pendingCursed holds a queued horizontal spawn that should wait for Skel ---
+    // pendingCursed = { spawnLeft: boolean, bw, bh, speedX, y } or null
+    let pendingCursed = null;
+
+    // --- NEW: Skel object (28 frames, 5 columns). Will play once and then trigger cursed horizontal spawn ---
+    // skelImage is 540 x 304 with 28 frames, 5 columns (rows = Math.ceil(28/5) = 6)
+    const skel = {
+      image: skelImage,
+      sheetWidth: 2700,
+      sheetHeight: 1824,
+      columns: 5,
+      rows: 6,
+      totalFrames: 28,
+      frameWidth: 2700 / 5,  // 540
+      frameHeight: 1824 / 6, // 304
+      currentFrame: 0,
+      frameCounter: 0,
+      frameDelay: 3, // Adjust this value to change animation speed
+      visible: false,
+      x: 0,
+      y: 0,
+      drawScale: 1.0,
+      active: false,
+    };
+
     function resize() {
       const w = Math.min(900, document.getElementById('game').clientWidth);
       const h = Math.min(650, document.getElementById('game').clientHeight);
       canvas.width = w;
       canvas.height = h;
+
+      // Update skel y to stand at ground (similar to players)
+      // place skel slightly above bottom so it stands on the same ground plane
+      skel.y = canvas.height - skel.frameHeight * skel.drawScale - 30;
     }
     resize();
     window.addEventListener('resize', () => { if (gameState !== 'playing') resize(); });
@@ -610,8 +641,36 @@
         // raised 30px higher than before
         const y = canvas.height - 110 - 60;
 
-        bricks.push(new Brick(startX, y, bw, bh, 0, '#cc3333', 'horizontal', speedX));
-        verticalRowCount = 0;
+        // --- NEW: If spawnLeft, show Skel first (28 frames) at leftmost side, then spawn the horizontal ---
+        // If a pendingCursed is already queued, skip creating another until resolved
+        if (spawnLeft) {
+          // Schedule a pending cursed spawn and start Skel animation
+          if (!pendingCursed) {
+            pendingCursed = { spawnLeft: true, bw, bh, speedX, y };
+            // Initialize skel to appear at leftmost edge
+            skel.x = 0; // leftmost position
+            skel.y = canvas.height - skel.frameHeight * skel.drawScale - 30;
+            skel.currentFrame = 0;
+            skel.frameCounter = 0;
+            skel.visible = true;
+            skel.active = true;
+          }
+        } else {
+          // spawn immediately when coming from right
+            // Initialize skel to appear at rightmost edge
+            skel.x = canvas.width - skel.frameWidth * skel.drawScale; // rightmost position
+            skel.y = canvas.height - skel.frameHeight * skel.drawScale - 30;
+            skel.currentFrame = 0;
+            skel.frameCounter = 0;
+            skel.visible = true;
+            skel.active = true;
+
+          // 930 millisecond delay
+          setTimeout(() => {
+            bricks.push(new Brick(startX, y, bw, bh, 0, '#cc3333', 'horizontal', speedX));
+            verticalRowCount = 0;
+          }, 930);
+        }
     }
 
 
@@ -702,6 +761,13 @@
       verticalRowCount = 0;
       isOver = false;
       deathOrder = [];
+      pendingCursed = null; // clear any pending cursed spawns
+      // reset skel state
+      skel.currentFrame = 0;
+      skel.frameCounter = 0;
+      skel.visible = false;
+      skel.active = false;
+
       lastTimestamp = performance.now();
       resize();
     }
@@ -928,6 +994,56 @@
       }
     }
 
+    // --- NEW: updateSkel() checks if skel active and advances frames; when finished, it spawns pending cursed horizontal ---
+    function updateSkel() {
+      if (!skel.active) return;
+
+      skel.frameCounter++;
+      if (skel.frameCounter >= skel.frameDelay) {
+        skel.frameCounter = 0;
+        skel.currentFrame++;
+      }
+
+      // If skel has played all frames, finish and spawn the pending cursed
+      if (skel.currentFrame >= skel.totalFrames) {
+        skel.active = false;
+        skel.visible = false;
+        skel.currentFrame = 0;
+        skel.frameCounter = 0;
+
+        // If there's a pendingCursed spawn scheduled, create the horizontal now
+        if (pendingCursed) {
+          const { bw, bh, speedX, y } = pendingCursed;
+          const startX = -bw; // left spawn
+          bricks.push(new Brick(startX, y, bw, bh, 0, '#cc3333', 'horizontal', speedX));
+          verticalRowCount = 0;
+          pendingCursed = null;
+        }
+      }
+    }
+
+    // --- NEW: drawSkel() renders current skel frame if visible ---
+    function drawSkel() {
+      if (!skel.visible) return;
+
+      const col = skel.currentFrame % skel.columns;
+      const row = Math.floor(skel.currentFrame / skel.columns);
+
+      const sx = col * skel.frameWidth;
+      const sy = row * skel.frameHeight;
+      const sw = skel.frameWidth;
+      const sh = skel.frameHeight;
+
+      // Destination draw size
+      const dw = sw * skel.drawScale;
+      const dh = sh * skel.drawScale;
+      const dx = skel.x;
+      const dy = skel.y;
+
+      // Draw skel frame
+      ctx.drawImage(skel.image, sx, sy, sw, sh, dx, dy, dw, dh);
+    }
+
     let startTimeMs = 0;
     function loop(ts) {
       if (gameState !== 'playing') { cancelAnimationFrame(rafId); return; }
@@ -939,6 +1055,11 @@
       if (!startTimeMs) startTimeMs = now;
 
       ctx.clearRect(0,0,canvas.width,canvas.height);
+
+      // --- NEW: Update Skel BEFORE players/bricks so he appears prior to the horizontal brick spawn ---
+      updateSkel();
+      // drawSkel BEFORE updating players so it sits on the background/hud layer (adjust as desired)
+      drawSkel();
 
       // Update players
       players.forEach(p => p.update(dt));
