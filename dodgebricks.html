@@ -284,21 +284,31 @@
     const playAgainBtn = document.getElementById('playAgainBtn');
     const gameOverMenuBtn = document.getElementById('gameOverMenuBtn');
 
+    // === Load all 18 brick images ===
+    // Preload brick images
+    const brickImages = [];
+    for (let i = 1; i <= 18; i++) {
+      const img = new Image();
+      img.src = `bricks/brick${i}.png`; // relative to the HTML file
+      brickImages.push(img);
+    }
+
+    
     // Sprites
     const erenSprite = new Image();
-    erenSprite.src = 'eren.png';
+    erenSprite.src = `Sprites/eren.png`;
 
     const kimetsuSprite = new Image();
-    kimetsuSprite.src = 'kimetsu.png';
+    kimetsuSprite.src = `Sprites/kimetsu.png`;
 
     const rengokuSprite = new Image();
-    rengokuSprite.src = 'rengoku.png';
+    rengokuSprite.src = `Sprites/rengoku.png`;
 
     const cursedImg = new Image();
-    cursedImg.src = "cursed.png";
+    cursedImg.src = `Sprites/cursed.png`;
 
     const skelImage = new Image();
-    skelImage.src = "skel.png";
+    skelImage.src = `Sprites/skel.png`;
 
     // State
     const settings = {
@@ -366,6 +376,7 @@
     }
     resize();
     window.addEventListener('resize', () => { if (gameState !== 'playing') resize(); });
+
 
     // Player
     function Player(id, x, y, controls, sprite = erenSprite, frameW = 57, frameH = 76) {
@@ -564,8 +575,8 @@
         ctx.restore();
 
         // Optional: ID tag
-        ctx.fillStyle = '#111827';
-        ctx.font = '12px Inter';
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '12px "Press Start 2P"';
         ctx.fillText(`P${this.id}`, this.x + 4, this.y - 6);
         };
 
@@ -685,11 +696,20 @@
                 );
                 ctx.restore();
             }
-        } else {
-            // vertical stays simple rectangle
-            ctx.fillStyle = this.color;
-            ctx.fillRect(this.x, this.y, this.w, this.h);
-        }
+            } else {
+              if (this.img && this.img.complete) {
+                  ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
+              } else {
+                  // fallback if image not loaded yet
+                  ctx.fillStyle = this.color || "black";
+                  ctx.fillRect(this.x, this.y, this.w, this.h);
+              }
+              ctx.save();
+              ctx.strokeStyle = "gold";
+              ctx.lineWidth = 1;
+              ctx.strokeRect(this.x, this.y, this.w, this.h);
+              ctx.restore();
+            }
     }
 
     }
@@ -704,7 +724,7 @@
 
     // Spawning
     function spawnVerticalRow() {
-      const bw = settings.baseBrickSize, bh = settings.baseBrickSize;
+      const bw = 40, bh = 40; // since your bricks are 40x40
       const total = Math.floor(canvas.width / (bw + settings.brickMargin));
 
       const gaps = [];
@@ -713,18 +733,22 @@
         if (!gaps.includes(r)) gaps.push(r);
       }
 
-      const color = `hsl(${Math.random()*360},70%,50%)`;
       let spd = settings.brickSpeed + Math.floor(score / 100) * 0.5;
       if (score >= 600) spd = settings.brickSpeed * 2 + Math.floor(score / 100) * 0.5;
 
-      for (let i=0;i<total;i++){
+      for (let i = 0; i < total; i++) {
         if (!gaps.includes(i)) {
           const x = i * (bw + settings.brickMargin);
-          bricks.push(new Brick(x, -bh, bw, bh, spd, color, 'vertical'));
+          const img = brickImages[Math.floor(Math.random() * brickImages.length)];
+
+          const brick = new Brick(x, -bh, bw, bh, spd, null, 'vertical');
+          brick.img = img; // assign the sprite
+          bricks.push(brick);
         }
       }
       verticalRowCount++;
     }
+
 
     // Spawning horizontal obstacle
     function spawnHorizontalObstacle() {
