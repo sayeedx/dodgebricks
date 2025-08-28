@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dodge the Bricks</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #game-container {
+            width: 100%;
+            height: 100%;
+            max-width: 800px;
+            max-height: 600px;
+            position: relative;
+            background-color: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+        }
+        
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            z-index: 100;
+            text-align: center;
+        }
+
+        #start-button {
+            padding: 1rem 2rem;
+            font-size: 1.25rem;
+            font-weight: bold;
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        #start-button:hover {
+            background-color: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
+        }
+
+        #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            z-index: 100;
+            text-align: center;
+        }
+
+        .message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #fff;
+            padding: 20px 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            color: #333;
+            z-index: 1000;
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-200">
+    <div id="game-container" class="rounded-xl shadow-lg">
+        <div id="start-screen">
+            <h1 class="text-4xl md:text-5xl font-extrabold mb-4">Dodge the Bricks</h1>
+            <p class="text-xl mb-8">Press 'Space' to jump over rolling bricks!</p>
+            <button id="start-button">Start Game</button>
+        </div>
+        <div id="game-over-screen">
+            <h2 class="text-4xl md:text-5xl font-extrabold mb-4">Game Over!</h2>
+            <p class="text-xl mb-2">Your Score:</p>
+            <p id="final-score" class="text-5xl md:text-6xl font-extrabold text-blue-400 mb-8">0</p>
+            <button id="restart-button" class="py-3 px-6 text-xl font-bold bg-green-500 rounded-lg transition-colors hover:bg-green-600">Restart</button>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <script>
+        // Use an IIFE (Immediately Invoked Function Expression) to avoid global scope pollution
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const startScreen = document.getElementById('start-screen');
+            const startButton = document.getElementById('start-button');
+            const gameOverScreen = document.getElementById('game-over-screen');
+            const finalScoreElement = document.getElementById('final-score');
+            const restartButton = document.getElementById('restart-button');
+
+            let score = 0;
+            let player = {};
+            let bricks = [];
+            let isGameOver = false;
+            let animationFrameId;
+            let rowSpawnCounter = 0;
+            let verticalRowCount = 0;
+
+            const settings = {
+                playerSpeed: 8,
+                brickSpeed: 1.5, // Bricks now fall slower
+                rowSpawnRate: 240, // Frames per new brick row (increased for more vertical space)
+                baseBrickSize: 40,
+                brickMargin: 25, // Spacing between bricks
+                jumpPower: 12,
+                gravity: 0.5
+            };
+
+            // Game state management
+            let gameState = 'start'; // 'start', 'playing', 'gameover'
+
+            // Utility functions
+            function getRandomNumber(min, max) {
+                return Math.floor(Math.random() * (max - min + 1)) + min;
+            }
+
+            // Object constructors
+            function Player(x, y, width, height, color) {
+                this.x = x;
+                this.y = y;
+                this.initialY = y;
+                this.width = width;
+                this.height = height;
+                this.color = color;
+                this.speedX = 0;
+                this.isMovingLeft = false;
+                this.isMovingRight = false;
+                this.yVelocity = 0;
+
+                this.update = function() {
+                    // Handle horizontal movement
+                    if (this.isMovingLeft) {
+                        this.x -= settings.playerSpeed;
+                    }
+                    if (this.isMovingRight) {
+                        this.x += settings.playerSpeed;
+                    }
+
+                    // Handle vertical (jump) movement
+                    this.y += this.yVelocity;
+                    this.yVelocity += settings.gravity;
+
+                    // Stop the jump when the player returns to the initial y position
+                    if (this.y >= this.initialY) {
+                        this.y = this.initialY;
+                        this.yVelocity = 0;
+                    }
+
+                    // Keep player within canvas bounds
+                    if (this.x < 0) {
+                        this.x = 0;
+                    }
+                    if (this.x + this.width > canvas.width) {
+                        this.x = canvas.width - this.width;
+                    }
+                };
+
+                this.draw = function() {
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    // Player is a simple rounded rectangle
+                    ctx.roundRect(this.x, this.y, this.width, this.height, 8);
+                    ctx.fill();
+                };
+
+                this.jump = function() {
+                    if (this.y === this.initialY) { // Only jump if on the ground
+                        this.yVelocity = -settings.jumpPower;
+                    }
+                };
+            }
+
+            function Brick(x, y, width, height, speed, color, type, speedX = 0) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.speed = speed;
+                this.color = color;
+                this.type = type; // 'vertical' or 'horizontal'
+                this.speedX = speedX;
+
+                this.update = function() {
+                    if (this.type === 'vertical') {
+                        this.y += this.speed;
+                    } else if (this.type === 'horizontal') {
+                        this.x += this.speedX;
+                    }
+                };
+
+                this.draw = function() {
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.roundRect(this.x, this.y, this.width, this.height, 4);
+                    ctx.fill();
+                };
+            }
+
+            function init() {
+                // Set canvas size for responsiveness
+                canvas.width = window.innerWidth > 800 ? 800 : window.innerWidth;
+                canvas.height = window.innerHeight > 600 ? 600 : window.innerHeight;
+
+                score = 0;
+                isGameOver = false;
+                bricks = [];
+                rowSpawnCounter = 0;
+                verticalRowCount = 0;
+
+                player = new Player(canvas.width / 2 - 25, canvas.height - 70, 50, 50, '#3b82f6');
+
+                // Event Listeners for player movement and jump
+                document.addEventListener('keydown', handleKeyDown);
+                document.addEventListener('keyup', handleKeyUp);
+                
+                // Add touch listeners for mobile
+                canvas.addEventListener('touchstart', handleTouchStart, false);
+                canvas.addEventListener('touchmove', handleTouchMove, false);
+                canvas.addEventListener('touchend', handleTouchEnd, false);
+            }
+
+            function handleKeyDown(e) {
+                if (gameState === 'playing') {
+                    if (e.key === 'ArrowLeft' || e.key === 'a') {
+                        player.isMovingLeft = true;
+                    } else if (e.key === 'ArrowRight' || e.key === 'd') {
+                        player.isMovingRight = true;
+                    } else if (e.key === ' ' && player.y === player.initialY) {
+                        player.jump();
+                    }
+                } else if (e.key === ' ' && gameState === 'start') {
+                    startGame();
+                } else if (e.key === ' ' && gameState === 'gameover') {
+                    restartGame();
+                }
+            }
+
+            function handleKeyUp(e) {
+                if (gameState === 'playing') {
+                    if (e.key === 'ArrowLeft' || e.key === 'a') {
+                        player.isMovingLeft = false;
+                    } else if (e.key === 'ArrowRight' || e.key === 'd') {
+                        player.isMovingRight = false;
+                    }
+                }
+            }
+            
+            let touchStartX = null;
+            function handleTouchStart(e) {
+                e.preventDefault();
+                const touch = e.touches[0];
+                touchStartX = touch.clientX;
+            }
+
+            function handleTouchMove(e) {
+                e.preventDefault();
+                if (touchStartX === null || gameState !== 'playing') return;
+
+                const touch = e.touches[0];
+                const deltaX = touch.clientX - touchStartX;
+
+                // Adjust player position based on touch delta
+                player.x += deltaX;
+                touchStartX = touch.clientX;
+
+                // Clamp player position
+                if (player.x < 0) {
+                    player.x = 0;
+                }
+                if (player.x + player.width > canvas.width) {
+                    player.x = canvas.width - player.width;
+                }
+            }
+            
+            function handleTouchEnd(e) {
+                e.preventDefault();
+                touchStartX = null;
+            }
+
+            function spawnVerticalRow() {
+                const brickWidth = settings.baseBrickSize;
+                const brickHeight = settings.baseBrickSize;
+                const totalBricksInRow = Math.floor(canvas.width / (brickWidth + settings.brickMargin));
+                const bricksInRow = [];
+
+                // Choose a random number of gaps (2 or 3)
+                const numGaps = getRandomNumber(2, 3);
+                const gaps = [];
+                while (gaps.length < numGaps) {
+                    const randomIndex = getRandomNumber(0, totalBricksInRow - 1);
+                    if (!gaps.includes(randomIndex)) {
+                        gaps.push(randomIndex);
+                    }
+                }
+
+                const brickColor = `hsl(${Math.random() * 360}, 70%, 50%)`;
+                const currentBrickSpeed = settings.brickSpeed + Math.floor(score / 100) * 0.5;
+
+                for (let i = 0; i < totalBricksInRow; i++) {
+                    if (!gaps.includes(i)) {
+                        const brickX = i * (brickWidth + settings.brickMargin);
+                        bricksInRow.push(new Brick(brickX, -brickHeight, brickWidth, brickHeight, currentBrickSpeed, brickColor, 'vertical'));
+                    }
+                }
+                bricks.push(...bricksInRow);
+                verticalRowCount++;
+            }
+
+            function spawnHorizontalObstacle() {
+                const brickWidth = 50; // Decreased width
+                const brickHeight = 40; // Increased height
+                
+                // Determine speed based on score
+                let brickSpeed = 3;
+                if (score >= 250) {
+                    brickSpeed = 6; // Double the speed
+                }
+                
+                const startX = Math.random() < 0.5 ? -brickWidth : canvas.width;
+                const speedX = startX === -brickWidth ? brickSpeed : -brickSpeed;
+                const yPosition = canvas.height - 70; // Position it to be jumped over
+
+                bricks.push(new Brick(startX, yPosition, brickWidth, brickHeight, 0, '#cc3333', 'horizontal', speedX));
+                verticalRowCount = 0; // Reset the counter after spawning the horizontal obstacle
+            }
+
+            function checkCollision(obstacle, player) {
+                // Simple AABB collision detection
+                return player.x < obstacle.x + obstacle.width &&
+                       player.x + player.width > obstacle.x &&
+                       player.y < obstacle.y + obstacle.height &&
+                       player.y + player.height > obstacle.y;
+            }
+
+            function drawScore() {
+                ctx.fillStyle = '#333';
+                ctx.font = '24px Inter';
+                ctx.textAlign = 'right';
+                ctx.fillText(`Score: ${Math.floor(score)}`, canvas.width - 20, 40);
+            }
+
+            function gameLoop() {
+                if (isGameOver) {
+                    cancelAnimationFrame(animationFrameId);
+                    return;
+                }
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Update and draw player
+                player.update();
+                player.draw();
+
+                // Spawn new brick rows based on a counter
+                rowSpawnCounter++;
+                const currentSpawnRate = Math.max(settings.rowSpawnRate - Math.floor(score / 50) * 5, 60);
+
+                if (rowSpawnCounter >= currentSpawnRate) {
+                    if (verticalRowCount < 3) { // Changed to spawn after 3 vertical rows
+                        spawnVerticalRow();
+                    } else {
+                        spawnHorizontalObstacle();
+                    }
+                    rowSpawnCounter = 0;
+                }
+                
+                // Update and draw bricks
+                for (let i = bricks.length - 1; i >= 0; i--) {
+                    const brick = bricks[i];
+                    
+                    // --- New logic: increase speed when bricks reach the player's height ---
+                    if (brick.type === 'vertical' && brick.y >= player.y) {
+                        brick.speed = 30; // Set a high speed to make it drop super fast
+                    }
+
+                    brick.update();
+                    brick.draw();
+
+                    // Check for collision with player
+                    if (checkCollision(brick, player)) {
+                        isGameOver = true;
+                        gameState = 'gameover';
+                        showGameOverScreen();
+                        break;
+                    }
+
+                    // Remove bricks that are off-screen
+                    if (brick.type === 'vertical' && brick.y > canvas.height) {
+                        bricks.splice(i, 1);
+                    } else if (brick.type === 'horizontal' && (brick.x + brick.width < 0 || brick.x > canvas.width)) {
+                        bricks.splice(i, 1);
+                    }
+                }
+
+                // Update score
+                score += 0.1;
+                drawScore();
+
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+
+            function startGame() {
+                startScreen.style.display = 'none';
+                gameOverScreen.style.display = 'none';
+                gameState = 'playing';
+                init();
+                gameLoop();
+            }
+
+            function restartGame() {
+                startGame();
+            }
+
+            function showGameOverScreen() {
+                finalScoreElement.textContent = Math.floor(score);
+                gameOverScreen.style.display = 'flex';
+                restartButton.focus(); // Focus the restart button for keyboard users
+            }
+
+            // Initial setup
+            init();
+
+            // Event Listeners for UI buttons
+            startButton.addEventListener('click', startGame);
+            restartButton.addEventListener('click', restartGame);
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                // Only resize if the game is not playing to avoid disruption
+                if (gameState === 'start' || gameState === 'gameover') {
+                    init();
+                }
+            });
+
+        })();
+    </script>
+</body>
+</html>
